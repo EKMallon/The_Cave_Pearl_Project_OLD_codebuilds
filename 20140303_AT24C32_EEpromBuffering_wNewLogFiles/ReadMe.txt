@@ -1,0 +1,3 @@
+This script uses PSTRING to to dramatically simplify the concatenation of the sensor data into a 28 byte long char buffer (the block write buffer on the AT24C32 eeprom is only 32 characters long and you need room for termination characters, etc).  Pstring uses simple print statements, but more importantly, it never causes buffer overflows if you try to stuff in too much data, like a mishandled sprintf statement could. .
+
+This code buffers each sensor read cycle to the I2C eeprom on, using two page writes per cycle. This simplifies the code a bit, as I have only one set of variables on the go. Then when the countlog = SamplesPerCycle, it does a reverse for loop to pull the data back out of the eeprom, and write it to the SD card.
