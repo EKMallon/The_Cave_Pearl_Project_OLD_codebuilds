@@ -89,20 +89,20 @@ void setup () {
   digitalWrite(INTERRUPT_PIN, HIGH);//pull up the interrupt pin
   pinMode(13, OUTPUT);     // initialize the LED pin as an output.
   digitalWrite(13, HIGH); // turn the LED on to warn against SD card removal does this work?
-  
+
   Serial.begin(9600);
   Wire.begin();
   RTC.begin();
   clearClockTrigger(); //stops RTC from holding the interrupt low if system reset
   // time for next alarm
   RTC.turnOffAlarm(1);
-  
-  #ifdef WAIT_TO_START  // only triggered if WAIT_TO_START is defined at beging of code
+
+#ifdef WAIT_TO_START  // only triggered if WAIT_TO_START is defined at beging of code
   Serial.println(F("Type any character to start"));
   while (!Serial.available());
-  #endif  
-  
-  
+#endif  
+
+
   DateTime now = RTC.now();
   DateTime compiled = DateTime(__DATE__, __TIME__);
   if (now.unixtime() < compiled.unixtime()) {
@@ -110,17 +110,21 @@ void setup () {
     // following line sets the RTC to the date & time this sketch was compiled
     RTC.adjust(DateTime(__DATE__, __TIME__));
   }
- 
+
   Alarmhour = now.hour();
   Alarmminute = now.minute()+ SampleInterval ;
   if (Alarmminute > 59) {  //error catch - if Alarmminute=60 the interrupt never triggers due to rollover
-  Alarmminute = 0; Alarmhour = Alarmhour+1; if (Alarmhour > 23) {Alarmhour =0;}
+    Alarmminute = 0; 
+    Alarmhour = Alarmhour+1; 
+    if (Alarmhour > 23) {
+      Alarmhour =0;
+    }
   }
- 
+
   initializeBMA();  //initialize the accelerometer - do I have to do this on every wake cycle?
-  
+
   delay(1000); //delay to prevent power stutters from writing header to the sd card
-  
+
   //get the SD card ready
   pinMode(chipSelect, OUTPUT);  //make sure that the default chip select pin is set to output, even if you don't use it 
 
@@ -129,7 +133,7 @@ void setup () {
   // make sure that the default chip select pin is set to
   // output, even if you don't use it:
   pinMode(10, OUTPUT);
-  
+
   // see if the card is present and can be initialized:
   if (!SD.begin(chipSelect)) {
     Serial.println("Card failed, or not present");
@@ -137,7 +141,7 @@ void setup () {
     return;
   }
   Serial.println("card initialized.");
-  
+
   // create a new file
   for (uint8_t i = 0; i < 100; i++) {
     filename[6] = i/10 + '0';
@@ -148,23 +152,28 @@ void setup () {
       break;  // leave the loop!
     }
   }
-  
+
   if (! logfile) {
-    Serial.println(F("Error creating logger file!"));error("1");
+    Serial.println(F("Error creating logger file!"));
+    error("1");
   }
 
-logfile.print(F("The sample interval for this series is: "));logfile.print(SampleInterval);logfile.println(F(" minutes"));
-logfile.println(F("YYYY/MM/DD HH:MM:SS, Cycle# = Time offset, Vcc(mV),  X = , Y = , Z = , BMATemp (C) , RTC temp (C)"));
-logfile.close();
+  logfile.print(F("The sample interval for this series is: "));
+  logfile.print(SampleInterval);
+  logfile.println(F(" minutes"));
+  logfile.println(F("YYYY/MM/DD HH:MM:SS, Cycle# = Time offset, Vcc(mV),  X = , Y = , Z = , BMATemp (C) , RTC temp (C)"));
+  logfile.close();
 
- // if (logfile.writeError || !logfile.sync()) {
- //     Serial.println(F("Error writing header to logger file!"));error("2");
- // }
+  // if (logfile.writeError || !logfile.sync()) {
+  //     Serial.println(F("Error writing header to logger file!"));error("2");
+  // }
 
 #ifdef ECHO_TO_SERIAL  
   Serial.print("Logging to: ");
   Serial.println(filename);
-  Serial.print(F("The sample interval for this series is: "));Serial.print(SampleInterval);Serial.println(F(" minutes"));
+  Serial.print(F("The sample interval for this series is: "));
+  Serial.print(SampleInterval);
+  Serial.println(F(" minutes"));
   Serial.println(F("Timestamp Y/M/D, HH:MM:SS,Time offset, Vcc = ,  X = , Y = , Z = , BMATemp (C) , RTC temp (C)"));
 #endif
 
@@ -172,118 +181,173 @@ logfile.close();
 }
 
 void loop () {
-  
+
   // keep track of how many lines have been written to a file
   // after so many lines, start a new file
   if(countLogs >= fileInterval){    
 
-      // create a new file
-  for (uint8_t i = 0; i < 100; i++) {
-    filename[6] = i/10 + '0';
-    filename[7] = i%10 + '0';
-    if (! SD.exists(filename)) {
-      // only open a new file if it doesn't exist
-      logfile = SD.open(filename, FILE_WRITE); 
-      break;  // leave the loop!
+    // create a new file
+    for (uint8_t i = 0; i < 100; i++) {
+      filename[6] = i/10 + '0';
+      filename[7] = i%10 + '0';
+      if (! SD.exists(filename)) {
+        // only open a new file if it doesn't exist
+        logfile = SD.open(filename, FILE_WRITE); 
+        break;  // leave the loop!
+      }
     }
-  }
-  
-  if (! logfile) {
-    Serial.println(F("Error creating logger file!"));error("1");
-  }
 
-logfile.print(F("The sample interval for this series is: "));logfile.print(SampleInterval);logfile.println(F(" minutes"));
-logfile.println(F("YYYY/MM/DD HH:MM:SS, Cycle#, = Time offset, Vcc(mV),  X = , Y = , Z = , BMATemp (C) , RTC temp (C)"));
-logfile.close();
+    if (! logfile) {
+      Serial.println(F("Error creating logger file!"));
+      error("1");
+    }
 
-//  if (logfile.writeError || !logfile.sync()) {
-//     Serial.println(F("Error writing header to logger file!"));error("2");
-//  }
+    logfile.print(F("The sample interval for this series is: "));
+    logfile.print(SampleInterval);
+    logfile.println(F(" minutes"));
+    logfile.println(F("YYYY/MM/DD HH:MM:SS, Cycle#, = Time offset, Vcc(mV),  X = , Y = , Z = , BMATemp (C) , RTC temp (C)"));
+    logfile.close();
+
+    //  if (logfile.writeError || !logfile.sync()) {
+    //     Serial.println(F("Error writing header to logger file!"));error("2");
+    //  }
 
 #ifdef ECHO_TO_SERIAL  
-  Serial.print("Logging to: ");
-  Serial.println(filename);
-  Serial.print(F("The sample interval for this series is: "));Serial.print(SampleInterval);Serial.println(F(" minutes"));
-  Serial.println(F("Timestamp Y/M/D, HH:MM:SS,Time offset, Vcc = ,  X = , Y = , Z = , BMATemp (C) , RTC temp (C)"));
+    Serial.print("Logging to: ");
+    Serial.println(filename);
+    Serial.print(F("The sample interval for this series is: "));
+    Serial.print(SampleInterval);
+    Serial.println(F(" minutes"));
+    Serial.println(F("Timestamp Y/M/D, HH:MM:SS,Time offset, Vcc = ,  X = , Y = , Z = , BMATemp (C) , RTC temp (C)"));
 #endif
-  
-  countLogs = 0;     // reset our counter to zero
+
+    countLogs = 0;     // reset our counter to zero
 
   }
-  
+
   for (int Cycle = 0; Cycle < SamplesPerCycle; Cycle++) { //this counts from 0 to (SamplesPerCycle-1)
-    
-  if (clockInterrupt) {
-  clearClockTrigger(); 
-  }
-  
-  read3AxisAcceleration();  //loads up the dataString
-  DateTime now = RTC.now();  // Read the time and date from the RTC
-  
-  if(Cycle==0){ //timestamp for each cycle only gets set once
-  sprintf(CycleTimeStamp, "%04d/%02d/%02d %02d:%02d:%02d", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
+
+    if (clockInterrupt) {
+      clearClockTrigger(); 
+    }
+
+    read3AxisAcceleration();  //loads up the dataString
+    DateTime now = RTC.now();  // Read the time and date from the RTC
+
+    if(Cycle==0){ //timestamp for each cycle only gets set once
+      sprintf(CycleTimeStamp, "%04d/%02d/%02d %02d:%02d:%02d", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
+    }
+
+    xAcc[Cycle]=x;
+    yAcc[Cycle]=y;
+    zAcc[Cycle]=z; //BMAtemp_[Cycle] = BMAtempfloat; 
+    wholeBMAtemp[Cycle] = (int)BMAtempfloat; 
+    fracBMAtemp[Cycle]= (BMAtempfloat - wholeBMAtemp[Cycle]) * 100; // Float split into 2 intergers
+    //can use sprintf(BMATempHolder, "%2d.%2d", wholeBMAtemp[Cycle], fracBMAtemp[Cycle]) if we need to recompose that float
+    Vcc[Cycle] = (readVcc()); 
+    if (Vcc[Cycle] < 2800){
+      Serial.println(F("Voltage too LOW"));
+      error ("L");
+    } //the hangs the system when the voltage is too low.
+
+    RTCTempfloat= get3231Temp();
+    wRTCtemp[Cycle] = (int)RTCTempfloat; 
+    fRTCtemp[Cycle]= (RTCTempfloat - wRTCtemp[Cycle]) * 100; // Float split into 2 intergers
+
+    //main serial line output loop - which can be commented out for deployment
+#ifdef ECHO_TO_SERIAL
+    Serial.print(CycleTimeStamp); 
+    Serial.print(F(" Cycle ")); 
+    Serial.print(Cycle);
+    Serial.print(F(",")); 
+    Serial.print(Vcc[Cycle]); 
+    Serial.print(F(","));
+    Serial.print(xAcc[Cycle]); 
+    Serial.print(F(","));
+    Serial.print(yAcc[Cycle]); 
+    Serial.print(F(",")); 
+    ;
+    Serial.print(zAcc[Cycle]); 
+    Serial.print(F(","));
+    Serial.print(wholeBMAtemp[Cycle]);
+    Serial.print(F("."));
+    Serial.print(fracBMAtemp[Cycle]);
+    Serial.print(F(","));
+    Serial.print(wRTCtemp[Cycle]);
+    Serial.print(F("."));
+    Serial.print(fRTCtemp[Cycle]);
+    Serial.print(F(",  Ram:"));
+    Serial.print(freeRam()); 
+    delay(50); //short delay to clear com lines
+#endif
+
+    // Once each full set of cycles is complete, dump data to the sd card
+    // but if Vcc below 2.85 volts, dont write to the sd card
+    if (Cycle==(SamplesPerCycle-1) && Vcc[Cycle] >= 2850){
+      Serial.print(F(" --write data --")); 
+      delay (50);// this line for debugging only
+
+      File logfile = SD.open(filename, FILE_WRITE); 
+
+      if (logfile) {      // if the file is available, write to it:
+
+        for (int i = 0; i < SamplesPerCycle; i++) {  //loop to dump out one line of data per cycle
+          logfile.print(CycleTimeStamp); 
+          logfile.print(F(",time offset:,"));
+          logfile.print(i);
+          logfile.print(F(","));
+          logfile.print(Vcc[i]); 
+          logfile.print(F(","));
+          logfile.print(xAcc[i]); 
+          logfile.print(F(","));
+          logfile.print(yAcc[i]); 
+          logfile.print(",");
+          logfile.print(zAcc[i]); 
+          logfile.print(F(","));
+          logfile.print(wholeBMAtemp[i]);
+          logfile.print(F("."));
+          logfile.print(fracBMAtemp[i]);
+          logfile.print(F(","));
+          logfile.print(wRTCtemp[i]);
+          logfile.print(F("."));
+          logfile.print(fRTCtemp[i]);
+          logfile.println(F(","));
+          // do I need to add a delay line here for sd card communications? could I buffer this better to save power?
+          countLogs++;
+        }
+        logfile.close();
+      }  
+      else {    //if the file isn't open, pop up an error:
+        Serial.println(F("Error opening datalog.txt file"));
+      }
+    }
+
+    // setNextAlarmTime();
+    Alarmhour = now.hour(); 
+    Alarmminute = now.minute()+SampleInterval;
+    if (Alarmminute > 59) {  //error catch - if alarmminute=60 the interrupt never triggers due to rollover!
+      Alarmminute =0; 
+      Alarmhour = Alarmhour+1; 
+      if (Alarmhour > 23) {
+        Alarmhour =0;
+      }
+    }
+    RTC.setAlarm1Simple(Alarmhour, Alarmminute);
+    RTC.turnOnAlarm(1);
+
+    //print lines commented out for deployment
+    Serial.print(F("  Alarm Set:")); 
+    Serial.print(now.hour(), DEC); 
+    Serial.print(':'); 
+    Serial.print(now.minute(), DEC);
+    Serial.print(F(" Sleep:")); 
+    Serial.print(SampleInterval);
+    Serial.println(F(" min."));
+    delay(100); //a delay long enought to boot out the serial coms 
+
+    sleepNow();  //the sleep call is inside the main cycle counter loop
   }
 
-  xAcc[Cycle]=x;yAcc[Cycle]=y;zAcc[Cycle]=z; //BMAtemp_[Cycle] = BMAtempfloat; 
-  wholeBMAtemp[Cycle] = (int)BMAtempfloat; fracBMAtemp[Cycle]= (BMAtempfloat - wholeBMAtemp[Cycle]) * 100; // Float split into 2 intergers
-  //can use sprintf(BMATempHolder, "%2d.%2d", wholeBMAtemp[Cycle], fracBMAtemp[Cycle]) if we need to recompose that float
-  Vcc[Cycle] = (readVcc()); 
-  if (Vcc[Cycle] < 2800){Serial.println(F("Voltage too LOW"));error ("L");} //the hangs the system when the voltage is too low.
-  
-  RTCTempfloat= get3231Temp();
-  wRTCtemp[Cycle] = (int)RTCTempfloat; fRTCtemp[Cycle]= (RTCTempfloat - wRTCtemp[Cycle]) * 100; // Float split into 2 intergers
-  
-  //main serial line output loop - which can be commented out for deployment
-  #ifdef ECHO_TO_SERIAL
-  Serial.print(CycleTimeStamp); Serial.print(F(" Cycle ")); Serial.print(Cycle);Serial.print(F(",")); Serial.print(Vcc[Cycle]); Serial.print(F(","));
-  Serial.print(xAcc[Cycle]); Serial.print(F(","));Serial.print(yAcc[Cycle]); Serial.print(F(",")); ;Serial.print(zAcc[Cycle]); Serial.print(F(","));
-  Serial.print(wholeBMAtemp[Cycle]);Serial.print(F("."));Serial.print(fracBMAtemp[Cycle]);Serial.print(F(","));
-  Serial.print(wRTCtemp[Cycle]);Serial.print(F("."));Serial.print(fRTCtemp[Cycle]);
-  Serial.print(F(",  Ram:"));Serial.print(freeRam()); 
-  delay(50); //short delay to clear com lines
-  #endif
-  
-  // Once each full set of cycles is complete, dump data to the sd card
-  // but if Vcc below 2.85 volts, dont write to the sd card
-  if (Cycle==(SamplesPerCycle-1) && Vcc[Cycle] >= 2850){
-  Serial.print(F(" --write data --")); delay (50);// this line for debugging only
-  
-  File logfile = SD.open(filename, FILE_WRITE); 
-  
-  if (logfile) {      // if the file is available, write to it:
-  
-  for (int i = 0; i < SamplesPerCycle; i++) {  //loop to dump out one line of data per cycle
-  logfile.print(CycleTimeStamp); 
-  logfile.print(F(",time offset:,"));logfile.print(i);logfile.print(F(","));logfile.print(Vcc[i]); logfile.print(F(","));
-  logfile.print(xAcc[i]); logfile.print(F(","));logfile.print(yAcc[i]); logfile.print(",");logfile.print(zAcc[i]); logfile.print(F(","));
-  logfile.print(wholeBMAtemp[i]);logfile.print(F("."));logfile.print(fracBMAtemp[i]);logfile.print(F(","));
-  logfile.print(wRTCtemp[i]);logfile.print(F("."));logfile.print(fRTCtemp[i]);logfile.println(F(","));
-  // do I need to add a delay line here for sd card communications? could I buffer this better to save power?
-  countLogs++;
-  }
-  logfile.close();
-  }  
-  else {    //if the file isn't open, pop up an error:
-  Serial.println(F("Error opening datalog.txt file"));
-  }
-  }
-  
-  // setNextAlarmTime();
-  Alarmhour = now.hour(); Alarmminute = now.minute()+SampleInterval;
-  if (Alarmminute > 59) {  //error catch - if alarmminute=60 the interrupt never triggers due to rollover!
-  Alarmminute =0; Alarmhour = Alarmhour+1; if (Alarmhour > 23) {Alarmhour =0;}
-  }
-  RTC.setAlarm1Simple(Alarmhour, Alarmminute);
-  RTC.turnOnAlarm(1);
-  
-  //print lines commented out for deployment
-  Serial.print(F("  Alarm Set:")); Serial.print(now.hour(), DEC); Serial.print(':'); Serial.print(now.minute(), DEC);
-  Serial.print(F(" Sleep:")); Serial.print(SampleInterval);Serial.println(F(" min."));
-  delay(100); //a delay long enought to boot out the serial coms 
-  
-  sleepNow();  //the sleep call is inside the main cycle counter loop
-  }
-  
 }
 
 
@@ -296,7 +360,7 @@ void sleepNow() {
   //  pinMode (i, OUTPUT);
   //  digitalWrite (i, LOW); 
   //  }
-  
+
   cbi(ADCSRA,ADEN); // Switch ADC OFF: worth 334 µA during sleep
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);
   sleep_enable();
@@ -337,26 +401,26 @@ void clearClockTrigger()
 
 float get3231Temp()
 {
- //temp registers (11h-12h) get updated automatically every 64s
- Wire.beginTransmission(DS3231_I2C_ADDRESS);
- Wire.write(0x11);
- Wire.endTransmission();
- Wire.requestFrom(DS3231_I2C_ADDRESS, 2);
+  //temp registers (11h-12h) get updated automatically every 64s
+  Wire.beginTransmission(DS3231_I2C_ADDRESS);
+  Wire.write(0x11);
+  Wire.endTransmission();
+  Wire.requestFrom(DS3231_I2C_ADDRESS, 2);
 
- if(Wire.available()) {
-   tMSB = Wire.read(); //2's complement int portion
-   tLSB = Wire.read(); //fraction portion
+  if(Wire.available()) {
+    tMSB = Wire.read(); //2's complement int portion
+    tLSB = Wire.read(); //fraction portion
 
-   temp3231 = ((((short)tMSB << 8 | (short)tLSB) >> 6) / 4.0); // Allows for readings below freezing - Thanks to Coding Badly
-   //temp3231 = (temp3231 * 1.8 + 32.0); // Convert Celcius to Fahrenheit
-return temp3231;
+    temp3231 = ((((short)tMSB << 8 | (short)tLSB) >> 6) / 4.0); // Allows for readings below freezing - Thanks to Coding Badly
+    //temp3231 = (temp3231 * 1.8 + 32.0); // Convert Celcius to Fahrenheit
+    return temp3231;
 
- }
- else {
-   temp3231 = 255.0;  //Use a value of 255 to error flag that we did not get temp data from the ds3231
- }
+  }
+  else {
+    temp3231 = 255.0;  //Use a value of 255 to error flag that we did not get temp data from the ds3231
+  }
 
- return temp3231;
+  return temp3231;
 }
 
 
@@ -370,8 +434,10 @@ byte read3AxisAcceleration()
   {
     dataArray[j] = Wire.read();
   }
-  if(!bitRead(dataArray[0],0)){return(0);}
-  
+  if(!bitRead(dataArray[0],0)){
+    return(0);
+  }
+
   BMAtemp = dataArray[6];
   x = dataArray[1] << 8;
   x |= dataArray[0];
@@ -422,12 +488,14 @@ int freeRam () {
 void error(char *str) {
   // always write error messages to the serial monitor but this routine wastes
   // everything passed to the string from the original call is in sram!
-  Serial.print(F("error in: "));Serial.println(str);
+  Serial.print(F("error in: "));
+  Serial.println(str);
   /* this next statement will start an endless loop, basically stopping all
    operation upon any error.  Change this behavior if you want. */
   // red LED indicates error
   //digitalWrite(redLEDpin, HIGH);
   while (1);
 }
+
 
 

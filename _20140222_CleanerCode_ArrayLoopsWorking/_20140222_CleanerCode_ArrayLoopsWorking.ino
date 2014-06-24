@@ -72,7 +72,7 @@ void setup () {
   digitalWrite(INTERRUPT_PIN, HIGH);//pull up the interrupt pin
   pinMode(13, OUTPUT);     // initialize the LED pin as an output.
   digitalWrite(13, HIGH); // turn the LED on to warn against SD card removal
-  
+
   Serial.begin(9600);
   Wire.begin();
   RTC.begin();
@@ -88,11 +88,15 @@ void setup () {
   Alarmhour = now.hour();
   Alarmminute = now.minute()+ SampleInterval ;
   if (Alarmminute > 59) {  //error catch - if Alarmminute=60 the interrupt never triggers due to rollover
-  Alarmminute = 0; Alarmhour = Alarmhour+1; if (Alarmhour > 23) {Alarmhour =0;}
+    Alarmminute = 0; 
+    Alarmhour = Alarmhour+1; 
+    if (Alarmhour > 23) {
+      Alarmhour =0;
+    }
   }
- 
+
   initializeBMA();  //initialize the accelerometer - do I have to do this on every wake cycle?
-  
+
   //get the SD card ready
   pinMode(chipSelect, OUTPUT);  //make sure that the default chip select pin is set to output, even if you don't use it 
   Serial.print(F("Initializing SD card...")); 
@@ -101,91 +105,146 @@ void setup () {
     return;
   }
   Serial.println(F("card initialized."));
-  Serial.print(F("The sample interval for this series is: "));Serial.print(SampleInterval);Serial.println(F(" minutes"));
+  Serial.print(F("The sample interval for this series is: "));
+  Serial.print(SampleInterval);
+  Serial.println(F(" minutes"));
   Serial.println(F("Timestamp Y/M/D, HH:MM:SS,Time offset, Vcc = ,  X = , Y = , Z = , BMATemp (C) , RTC temp (C)"));
-  
+
   File dataFile = SD.open("datalog.txt", FILE_WRITE);  //PRINT THE DATA FILE HEADER
   if (dataFile) {      // if the file is available, write to it:
-  dataFile.print(F("The sample interval for this series is: "));dataFile.print(SampleInterval);dataFile.println(F(" minutes."));
-  dataFile.print(F("A full timestamp will be generated every"));dataFile.print(SamplesPerSRAMCycle);dataFile.println(F(" samples."));
-  dataFile.println(F("YYYY/MM/DD HH:MM:SS, Cycle# = Time offset, Vcc(mV),  X = , Y = , Z = , BMATemp (C) , RTC temp (C)"));
-  dataFile.close();
+    dataFile.print(F("The sample interval for this series is: "));
+    dataFile.print(SampleInterval);
+    dataFile.println(F(" minutes."));
+    dataFile.print(F("A full timestamp will be generated every"));
+    dataFile.print(SamplesPerSRAMCycle);
+    dataFile.println(F(" samples."));
+    dataFile.println(F("YYYY/MM/DD HH:MM:SS, Cycle# = Time offset, Vcc(mV),  X = , Y = , Z = , BMATemp (C) , RTC temp (C)"));
+    dataFile.close();
   }  
   else {   //if the file isn't open, pop up an error:
-  Serial.println(F("Error opening datalog.txt file!"));
+    Serial.println(F("Error opening datalog.txt file!"));
   }
   digitalWrite(13, LOW);
 }
 
 void loop () {
-  
+
   for (int Cycle = 0; Cycle < SamplesPerSRAMCycle; Cycle++) { //this counts from 0 to (SamplesPerSRAMCycle-1)
-    
-  if (clockInterrupt) {
-  clearClockTrigger(); 
-  }
-  
-  read3AxisAcceleration();  //loads up the dataString
-  DateTime now = RTC.now();  // Read the time and date from the RTC
-  
-  if(Cycle==0){ //timestamp for each cycle only gets set once
-  sprintf(SRAMCycleTimeStamp, "%04d/%02d/%02d %02d:%02d:%02d", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
+
+    if (clockInterrupt) {
+      clearClockTrigger(); 
+    }
+
+    read3AxisAcceleration();  //loads up the dataString
+    DateTime now = RTC.now();  // Read the time and date from the RTC
+
+    if(Cycle==0){ //timestamp for each cycle only gets set once
+      sprintf(SRAMCycleTimeStamp, "%04d/%02d/%02d %02d:%02d:%02d", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
+    }
+
+    xAcc[Cycle]=x;
+    yAcc[Cycle]=y;
+    zAcc[Cycle]=z; //BMAtemp_[Cycle] = BMAtempfloat; 
+    wholeBMAtemp[Cycle] = (int)BMAtempfloat; 
+    fracBMAtemp[Cycle]= (BMAtempfloat - wholeBMAtemp[Cycle]) * 100; // Float split into 2 intergers
+    //can use sprintf(BMATempHolder, "%2d.%2d", wholeBMAtemp[Cycle], fracBMAtemp[Cycle]) if we need to recompose that float
+    Vcc[Cycle] = (readVcc()); 
+    RTCTempfloat= get3231Temp();
+    wRTCtemp[Cycle] = (int)RTCTempfloat; 
+    fRTCtemp[Cycle]= (RTCTempfloat - wRTCtemp[Cycle]) * 100; // Float split into 2 intergers
+
+    //main serial line output loop - which can be commented out for deployment
+    Serial.print(SRAMCycleTimeStamp); 
+    Serial.print(F(" Cycle ")); 
+    Serial.print(Cycle);
+    Serial.print(","); 
+    Serial.print(Vcc[Cycle]); 
+    Serial.print(",");
+    Serial.print(xAcc[Cycle]); 
+    Serial.print(",");
+    Serial.print(yAcc[Cycle]); 
+    Serial.print(","); 
+    ;
+    Serial.print(zAcc[Cycle]); 
+    Serial.print(",");
+    Serial.print(wholeBMAtemp[Cycle]);
+    Serial.print(".");
+    Serial.print(fracBMAtemp[Cycle]);
+    Serial.print(",");
+    Serial.print(wRTCtemp[Cycle]);
+    Serial.print(".");
+    Serial.print(fRTCtemp[Cycle]);
+    Serial.print(F(",  Ram:"));
+    Serial.print(freeRam()); 
+    delay(50); //short delay to clear com lines
+
+    // Once each full set of cycles is complete, dump data to the sd card
+    // but if Vcc below 2.85 volts, dont write to the sd card
+    if (Cycle==(SamplesPerSRAMCycle-1) && Vcc[Cycle] >= 2850){
+      Serial.print(F(" --write data --")); 
+      delay (50);// this line for debugging only
+
+      File dataFile = SD.open("datalog.txt", FILE_WRITE); 
+
+      if (dataFile) {      // if the file is available, write to it:
+
+        for (int i = 0; i < SamplesPerSRAMCycle; i++) {  //loop to dump out one line of data per cycle
+          if (i=0){
+            dataFile.print(SRAMCycleTimeStamp);
+          }
+          dataFile.print(F(",offset:"));
+          dataFile.print(i);
+          dataFile.print(",");
+          dataFile.print(Vcc[i]); 
+          dataFile.print(",");
+          dataFile.print(xAcc[i]); 
+          dataFile.print(",");
+          dataFile.print(yAcc[i]); 
+          dataFile.print(",");
+          dataFile.print(zAcc[i]); 
+          dataFile.print(",");
+          dataFile.print(wholeBMAtemp[i]);
+          dataFile.print(".");
+          dataFile.print(fracBMAtemp[i]);
+          dataFile.print(",");
+          dataFile.print(wRTCtemp[i]);
+          dataFile.print(".");
+          dataFile.println(fRTCtemp[i]);
+          // do I need to add a delay line here for sd card communications? could I buffer this better to save power?
+        }
+        dataFile.close();
+      }  
+      else {    //if the file isn't open, pop up an error:
+        Serial.println(F("Error opening datalog.txt file"));
+      }
+    }
+
+    // setNextAlarmTime();
+    Alarmhour = now.hour(); 
+    Alarmminute = now.minute()+SampleInterval;
+    if (Alarmminute > 59) {  //error catch - if alarmminute=60 the interrupt never triggers due to rollover!
+      Alarmminute =0; 
+      Alarmhour = Alarmhour+1; 
+      if (Alarmhour > 23) {
+        Alarmhour =0;
+      }
+    }
+    RTC.setAlarm1Simple(Alarmhour, Alarmminute);
+    RTC.turnOnAlarm(1);
+
+    //print lines commented out for deployment
+    Serial.print(F("  Alarm Set:")); 
+    Serial.print(now.hour(), DEC); 
+    Serial.print(':'); 
+    Serial.print(now.minute(), DEC);
+    Serial.print(F(" Sleep:")); 
+    Serial.print(SampleInterval);
+    Serial.println(F(" min."));
+    delay(100); //a delay long enought to boot out the serial coms 
+
+    sleepNow();  //the sleep call is inside the main cycle counter loop
   }
 
-  xAcc[Cycle]=x;yAcc[Cycle]=y;zAcc[Cycle]=z; //BMAtemp_[Cycle] = BMAtempfloat; 
-  wholeBMAtemp[Cycle] = (int)BMAtempfloat; fracBMAtemp[Cycle]= (BMAtempfloat - wholeBMAtemp[Cycle]) * 100; // Float split into 2 intergers
-  //can use sprintf(BMATempHolder, "%2d.%2d", wholeBMAtemp[Cycle], fracBMAtemp[Cycle]) if we need to recompose that float
-  Vcc[Cycle] = (readVcc()); RTCTempfloat= get3231Temp();
-  wRTCtemp[Cycle] = (int)RTCTempfloat; fRTCtemp[Cycle]= (RTCTempfloat - wRTCtemp[Cycle]) * 100; // Float split into 2 intergers
-  
-  //main serial line output loop - which can be commented out for deployment
-  Serial.print(SRAMCycleTimeStamp); Serial.print(F(" Cycle ")); Serial.print(Cycle);Serial.print(","); Serial.print(Vcc[Cycle]); Serial.print(",");
-  Serial.print(xAcc[Cycle]); Serial.print(",");Serial.print(yAcc[Cycle]); Serial.print(","); ;Serial.print(zAcc[Cycle]); Serial.print(",");
-  Serial.print(wholeBMAtemp[Cycle]);Serial.print(".");Serial.print(fracBMAtemp[Cycle]);Serial.print(",");
-  Serial.print(wRTCtemp[Cycle]);Serial.print(".");Serial.print(fRTCtemp[Cycle]);
-  Serial.print(F(",  Ram:"));Serial.print(freeRam()); 
-  delay(50); //short delay to clear com lines
-  
-  // Once each full set of cycles is complete, dump data to the sd card
-  // but if Vcc below 2.85 volts, dont write to the sd card
-  if (Cycle==(SamplesPerSRAMCycle-1) && Vcc[Cycle] >= 2850){
-  Serial.print(F(" --write data --")); delay (50);// this line for debugging only
-  
-  File dataFile = SD.open("datalog.txt", FILE_WRITE); 
-  
-  if (dataFile) {      // if the file is available, write to it:
-  
-  for (int i = 0; i < SamplesPerSRAMCycle; i++) {  //loop to dump out one line of data per cycle
-  if (i=0){dataFile.print(SRAMCycleTimeStamp);}
-  dataFile.print(F(",offset:"));dataFile.print(i);dataFile.print(",");dataFile.print(Vcc[i]); dataFile.print(",");
-  dataFile.print(xAcc[i]); dataFile.print(",");dataFile.print(yAcc[i]); dataFile.print(",");dataFile.print(zAcc[i]); dataFile.print(",");
-  dataFile.print(wholeBMAtemp[i]);dataFile.print(".");dataFile.print(fracBMAtemp[i]);dataFile.print(",");
-  dataFile.print(wRTCtemp[i]);dataFile.print(".");dataFile.println(fRTCtemp[i]);
-  // do I need to add a delay line here for sd card communications? could I buffer this better to save power?
-  }
-  dataFile.close();
-  }  
-  else {    //if the file isn't open, pop up an error:
-  Serial.println(F("Error opening datalog.txt file"));
-  }
-  }
-  
-  // setNextAlarmTime();
-  Alarmhour = now.hour(); Alarmminute = now.minute()+SampleInterval;
-  if (Alarmminute > 59) {  //error catch - if alarmminute=60 the interrupt never triggers due to rollover!
-  Alarmminute =0; Alarmhour = Alarmhour+1; if (Alarmhour > 23) {Alarmhour =0;}
-  }
-  RTC.setAlarm1Simple(Alarmhour, Alarmminute);
-  RTC.turnOnAlarm(1);
-  
-  //print lines commented out for deployment
-  Serial.print(F("  Alarm Set:")); Serial.print(now.hour(), DEC); Serial.print(':'); Serial.print(now.minute(), DEC);
-  Serial.print(F(" Sleep:")); Serial.print(SampleInterval);Serial.println(F(" min."));
-  delay(100); //a delay long enought to boot out the serial coms 
-  
-  sleepNow();  //the sleep call is inside the main cycle counter loop
-  }
-  
 }
 
 
@@ -197,7 +256,7 @@ void sleepNow() {
   //  pinMode (i, OUTPUT);
   //  digitalWrite (i, LOW); 
   //  }
-  
+
   cbi(ADCSRA,ADEN); // Switch ADC OFF: worth 334 µA during sleep
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);
   sleep_enable();
@@ -238,26 +297,26 @@ void clearClockTrigger()
 
 float get3231Temp()
 {
- //temp registers (11h-12h) get updated automatically every 64s
- Wire.beginTransmission(DS3231_I2C_ADDRESS);
- Wire.write(0x11);
- Wire.endTransmission();
- Wire.requestFrom(DS3231_I2C_ADDRESS, 2);
+  //temp registers (11h-12h) get updated automatically every 64s
+  Wire.beginTransmission(DS3231_I2C_ADDRESS);
+  Wire.write(0x11);
+  Wire.endTransmission();
+  Wire.requestFrom(DS3231_I2C_ADDRESS, 2);
 
- if(Wire.available()) {
-   tMSB = Wire.read(); //2's complement int portion
-   tLSB = Wire.read(); //fraction portion
+  if(Wire.available()) {
+    tMSB = Wire.read(); //2's complement int portion
+    tLSB = Wire.read(); //fraction portion
 
-   temp3231 = ((((short)tMSB << 8 | (short)tLSB) >> 6) / 4.0); // Allows for readings below freezing - Thanks to Coding Badly
-   //temp3231 = (temp3231 * 1.8 + 32.0); // Convert Celcius to Fahrenheit
-return temp3231;
+    temp3231 = ((((short)tMSB << 8 | (short)tLSB) >> 6) / 4.0); // Allows for readings below freezing - Thanks to Coding Badly
+    //temp3231 = (temp3231 * 1.8 + 32.0); // Convert Celcius to Fahrenheit
+    return temp3231;
 
- }
- else {
-   temp3231 = 255.0;  //Use a value of 255 to error flag that we did not get temp data from the ds3231
- }
+  }
+  else {
+    temp3231 = 255.0;  //Use a value of 255 to error flag that we did not get temp data from the ds3231
+  }
 
- return temp3231;
+  return temp3231;
 }
 
 
@@ -271,8 +330,10 @@ byte read3AxisAcceleration()
   {
     dataArray[j] = Wire.read();
   }
-  if(!bitRead(dataArray[0],0)){return(0);}
-  
+  if(!bitRead(dataArray[0],0)){
+    return(0);
+  }
+
   BMAtemp = dataArray[6];
   x = dataArray[1] << 8;
   x |= dataArray[0];
@@ -319,5 +380,6 @@ int freeRam () {
   int v; 
   return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
 }
+
 
 
