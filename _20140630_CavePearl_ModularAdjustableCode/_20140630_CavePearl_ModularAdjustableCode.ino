@@ -33,16 +33,16 @@
 #include <SdFat.h>      // needs 512 byte buffer,  from  https://code.google.com/p/sdfatlib/downloads/list
 SdFat sd; /*Create the objects to talk to the SD card*/
 SdFile file;
-const byte chipSelect = 10; //sd card chip select
+const byte chipSelect = 10; //sd card chip select pin
 
-#define SampleIntervalMinutes 0   // power-down time in minutes before interupt triggers the next sample
-#define SampleIntSeconds 20 // this is ONLY used for DEBUGGING! otherwise SET to 0! Must Set minutes to zero for sub minute alarms to occur!
+#define SampleIntervalMinutes 15   // power-down time in minutes before interupt triggers the next sample
+//#define SampleIntSeconds 20 // this is ONLY used for DEBUGGING! otherwise SET to 0! Must Set minutes to zero for sub minute alarms to occur!
 
-#define SamplesPerCycle 10  // MAX # of sample cycles to buffer in eeprom before sd card write 
-//The AT25C32 is internally organized into (32,768 bits)=4096 bytes - beyond 4096 characters it rewrites over top of the data
-//(128 x 32byte writes fill entire 4096 byte block) so MAX 64 wout compass (2 pgwrites/cycle) but max 42 if compass is installed! (3 pgwrites/cycle)
+#define SamplesPerCycle 42  // MAX # of sample cycles to buffer in eeprom before sd card write 
+//The AT25C32 is internally organized into (32,768 bits)=4096 bytes - beyond 4096 characters it rewrites over top of the old data
+//(128 x 32byte writes fill entire 4096 byte block) so MAX 64 wout compass (2 pgwrites/cycle) but max=42 if compass is installed! (3 pgwrites/cycle)
 unsigned int countLogs = 0;      // # records have been written to each file so far
-unsigned int fileInterval = 5000; // #of log records before new logfile is made usually 2880
+unsigned int fileInterval = 2800; // #of log records before new logfile is made usually 2880
 /* count each time a log is written into each file.  Must be less than 65,535 counts per file.  If the sampleinterval is 15min,
  and fileInterval is 2880 seconds, then 96samples/day * 30days/month = 30 day intervals */
 char FileName[] = "LOG00000.CSV";  //the first file name
@@ -63,8 +63,8 @@ byte Cycle=0;
 //#define MS5803_02_ISON 0x76//(CSB pin 3 tied to Vdd)
 //#define MS5803_05_ISON 0x76//(CSB pin 3 tied to Vdd)
 
-//#define unregulatedMCU 1  //can read vcc directly
-#define vRegulatedMCU 1  //need to use a voltage divider and analog pin
+#define unregulatedMCU 1  //tiny duino can read vcc directly
+//#define vRegulatedMCU 1  //need to use a voltage divider and analog pin
 int Vcc; //the supply voltage (via 1.1 internal band gap OR analog read)
 int Vcc2; //the post SD card write voltage
 //int Vdelta;   //change in supply voltage after each SD write cycle...to track battery conditioin
