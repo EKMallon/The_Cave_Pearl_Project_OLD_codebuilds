@@ -19,8 +19,8 @@
 *       Sensors supported included in this build:
 *       HMC5883 Compass, DS18B20 Temp, TMP102 Temp, BMA180 Acc, BMA250 Acc, Ms5803-02 & 05 Pressure sensors
 *       *uncomment defines at the beginning of the script for each sensor you have connected - the rest of the code should
-*       adjust automatically...more or less...
-*
+*       adjust automatically...more or less...you might want to adjust the pstring statements where the readings are concatenated
+*       or you will have alot of zeros in your data files where there is a print statement, but no sensor reads to go with it.
 */
  
 

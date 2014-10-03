@@ -37,5 +37,5 @@ HMC5883 Compass, DS18B20 Temp, TMP102 Temp, BMA180 Acc, BMA250 Acc, Ms5803-02 & 
 -----------------------------------------------------------------------------------------------------
 
 
-P.S. Looking back at the earlier Cave Pearl scripts, I can see many places where I borked the fomatting so badly that it probably any the real coders out there wish they were blind. But hey, I have only ever taken one programming course in my life...fortran...in high school...no screens & keyboards...just bubble cards and printouts several days later...  This might be something for you to consider before using any of this code on a project that is actually important...
+P.S. Looking back at the earlier Cave Pearl scripts, I can see many places where I borked the fomatting so badly that it probably any real coders out there wish they were blind. But hey, I have only ever taken one programming course in my life...fortran...in high school...no screens & keyboards...just bubble cards and printouts several days later...  This might be something for you to consider before using any of this code on a project that is actually important...
 
