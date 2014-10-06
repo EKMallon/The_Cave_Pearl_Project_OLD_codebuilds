@@ -111,7 +111,7 @@ char loggerNumber[] = "DSDL03";
 #define GREEN_PIN 5
 #define BLUE_PIN 6
 
-byte READSENSOR_PIN = 5;
+byte READSENSOR_PIN = GREEN_PIN;
 
 //ds04, 01 02: 456
 
