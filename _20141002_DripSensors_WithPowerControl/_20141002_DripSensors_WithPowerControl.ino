@@ -948,15 +948,19 @@ void loop ()
              
              // sleep for a total of 64 seconds (12 x 8s) so the day "rolls over" while we are in this loop
              // yes I knwo this causes a gap in the timing, but I only use sub minute sampling for debug anyway.
-             int j;
-             for (j = 0; j <8; j++)
-             {
-             //setWTD_8s();
-             //sleepNwait4WDT();
-             LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);  //two lines above replaced by this
-             }
+             //int j;
+             //for (j = 0; j <8; j++)
+             //{
+             /* //setWTD_8s();
+             //sleepNwait4WDT(); */
+             //LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);  //two lines above replaced by this
+             //}
+            //while more elegant the sleeping delay loop did not seem to work, so I am just going with the dumb method
+            delay(327670);// Just wait for a 1.5 minutes to pass..
+            delay(327670);
+            delay(327670); 
             
-            DateTime now = RTC.now();  //now start the numbers again with the new day already rolled over
+            DateTime now = RTC.now();  //now set the alarm again with the day already rolled over
             Alarmday = now.day();
             Alarmhour = now.hour(); 
             Alarmminute = now.minute();
