@@ -48,7 +48,7 @@ SdFile file;
 const byte chipSelect = 10; //sd card chip select
 
 //#define ECHO_TO_SERIAL   // for debugging  this takes about the same memory as doing the first order pressure calculations!
-#define SampleIntervalMinutes 15   // power-down time in minutes before interupt triggers the next cycle
+#define SampleIntervalMinutes 15   // power-down time in minutes before RTC interrupt triggers the next cycle
 #define SampleIntSeconds 0 // this is ONLY used for DEBUGGING! otherwise SET to 0! Must Set minutes to zero for sub minute alarms to occur!
 
 #define SamplesPerCycle 64  // MAX # of sample cycles to buffer in eeprom before sd card write 
@@ -93,9 +93,9 @@ const float resistorFactor = 511; // = 1023.0 * (R2/(R1 + R2));  if R1 and R2 ar
 #endif
 
 #define POWERDOWN_PIN 9 //which pin is driving the pololu powerswitch LV - if you are not using it then comment out this define
-int BlueVWarning = 3600;
-int RedVWarning = 3500;
 int CutoffVoltage = 3400;  //most of the regulated boards go down to 3400 mV but set this for the board you are using
+int BlueVWarning = CutoffVoltage+300; //I have READSENSOR_PIN's led pip changing from Green -> Blue -> Red based on these numbers
+int RedVWarning = CutoffVoltage+150;  //to warn you when the batteries are running low
 
 char unitNumber[] = "DS03";
 char loggerNumber[] = "DSDL03";
@@ -229,7 +229,7 @@ int _ms580Xresolution = 512;  //MS580X sensor oversampling rate
 //what to add to this base addresses for d1&d2 
 #define CMD_ADC_D1	0x00	
 #define CMD_ADC_D2	0x10	
-//2,4,6,8 to add to the above addresses to change the resolution
+//2,4,6,8 to add to the base address to change the resolution
 #define CMD_ADC_256	0x00	// ADC resolution=256
 #define CMD_ADC_512	0x02	// ADC resolution=512  //default after reset
 #define CMD_ADC_1024	0x04	// ADC resolution=1024
@@ -237,13 +237,13 @@ int _ms580Xresolution = 512;  //MS580X sensor oversampling rate
 #define CMD_ADC_4096	0x08	// ADC resolution=4096
 //resolutions at these oversample ratios are  0.084 / 0.054 / 0.036 / 0.024 mbar //
 // Create array to hold the 8 sensor calibration coefficients
-unsigned int sensorCoeffs[8]; // unsigned 16-bit integer (0-65535)                             ERROR only need 7 here?
+unsigned int sensorCoeffs[8]; // unsigned 16-bit integer (0-65535) -ERROR only need 7 here?
 // bytes to hold the results from I2C communications with the sensor
 byte HighByte;
 byte MidByte;
 byte LowByte;
 
-uint8_t wholeTempP=0;
+uint8_t wholeTempP=0;  //for breaking the decimal value into integers for Pstring print functions
 uint8_t fracTempP=0;
 
 bool verbose = true;
@@ -415,13 +415,13 @@ void setup () {
   Serial.println(F(" ")); 
 
 #ifdef accelIsAttached
-  Serial.println(F("YYYY/MM/DD HH:MM, Temp(C), Vcc(mV)/10,  AccX = , AccY = , AccZ = , Vcc2 , Compass X, Compass Y, Compass Z,"));
+  Serial.println(F("YYYY/MM/DD HH:MM, Temp(C), Vcc(mV),  AccX = , AccY = , AccZ = , Vcc2 , Compass X, Compass Y, Compass Z,"));
 #endif
 #ifdef MS580X_I2C_ADDRESS  //if we are pressure sensing, the unit is stationary, and we dont have the acc or comass running
-  Serial.println(F("YYYY/MM/DD HH:MM, Temp(C), Vcc(mV)/10, D1(Raw MS580x Press), D2(Raw MS580x Temp), Vcc2 , 1st order Pres (mbar), 1st ord. Temp(C)"));
+  Serial.println(F("YYYY/MM/DD HH:MM, Temp(C), Vcc(mV), D1(Raw MS580x Press), D2(Raw MS580x Temp), Vcc2 , 1st order Pres (mbar), 1st ord. Temp(C)"));
 #endif
 #ifdef ADXL345_ISON
-  Serial.println(F("YYYY/MM/DD HH:MM, RTC Temp(C),External Vcc(mV)/10, Drip Count ,Vcc(2) after Newfile Created"));
+  Serial.println(F("YYYY/MM/DD HH:MM, RTC Temp(C),External Vcc(mV), Drip Count ,Vcc(2) after Newfile Created"));
 #endif
 
   Serial.flush();//delay(50); //short delay to clear serial com lines 
@@ -521,13 +521,13 @@ file.println(F(" "));
   file.println(F(" "));
 
 #ifdef accelIsAttached
-  file.println(F("YYYY/MM/DD HH:MM, Temp(C), Vcc(mV)/10, AccX = , AccY = , AccZ = , Vcc2 , Compass X, Compass Y, Compass Z,"));
+  file.println(F("YYYY/MM/DD HH:MM, Temp(C), Vcc(mV), AccX = , AccY = , AccZ = , Vcc2 , Compass X, Compass Y, Compass Z,"));
 #endif
 #ifdef MS580X_I2C_ADDRESS  //if we are pressure sensing, the unit is stationary, and we dont have the acc or comass running
-  file.println(F("YYYY/MM/DD HH:MM, Temp(C), Vcc(mV)/10, D1(Raw MS580x Press), D2(Raw MS580x Temp), Vcc2 , 1st order Pres (mbar), 1st ord. Temp(C)"));
+  file.println(F("YYYY/MM/DD HH:MM, Temp(C), Vcc(mV), D1(Raw MS580x Press), D2(Raw MS580x Temp), Vcc2 , 1st order Pres (mbar), 1st ord. Temp(C)"));
 #endif
 #ifdef ADXL345_ISON
-  file.println(F("YYYY/MM/DD HH:MM, RTC Temp(C), Vcc(mV)/10, Drip Count ,Vcc after Newfile Created"));
+  file.println(F("YYYY/MM/DD HH:MM, RTC Temp(C), Vcc(mV), Drip Count ,Vcc after Newfile Created"));
 #endif
 
   file.println(F(" "));
@@ -538,7 +538,6 @@ file.println(F(" "));
 
   DIDR0 = 0x0F; // disable the digital inputs on analog 0..3 so we can use analog sensors  (analog 4&5 being used by I2C!) 
  
-  
  //set any unused digital pins, that are NOT connected to ANYTHING to input HIGH so they dont float during sleep
  #ifndef ECHO_TO_SERIAL
  pinMode(0, INPUT); digitalWrite(0, HIGH);  //if we are on usb then these pins are RX & TX 
@@ -549,7 +548,7 @@ file.println(F(" "));
  pinMode(7, INPUT); digitalWrite(7, HIGH);
  pinMode(8, INPUT); digitalWrite(8, HIGH);
 // pinMode(9, INPUT); digitalWrite(9, HIGH) dont set this if pin 9 is being used to trigger pololu power switch!
- //10,11,12,13 connected to the Sd card
+ //10,11,12,13 connected to the Sd card, SPI mode
  
  Vcc = readExternalVcc(); //first check of the system voltage
  if (Vcc < BlueVWarning){
@@ -573,13 +572,13 @@ file.println(F(" "));
  *******************************************************************************************************************************************
 /******************************************************************************************************************************************/
 
-// errors during main loop will only call error routine & halt the system if ECHO_TO_SERIAL is defined (ie: we are in debug mode)
+// sensor errors during main loop should only call error routine & halt the system if ECHO_TO_SERIAL is defined (ie: we are in debug mode)
 // that way if one sensor dies in the field we can still get data from the others
 void loop () 
 { 
   
-  // keep track of how many lines have been written to a file
-  // after so many lines, start a new file
+  // countLogs track how many lines have been written to the file
+  // if it goes above your file interval set at the beginning, start a new file
   if(countLogs >= fileInterval){
     digitalWrite(RED_PIN, HIGH);
     createLogFile();   // create a new file this is the largest power using event!
@@ -589,9 +588,12 @@ void loop ()
 
   CurrentPageStartAddress = 0; 
 
+//this for loop wraps the "cycle of samples" repeating to the point where the eeprom is full
+//--------------------------------------------------------------------------------------------------
+
   for (int Cycle = 0; Cycle < SamplesPerCycle; Cycle++) { //this counts from 0 to (SamplesPerCycle-1)
 
-    if (clockInterrupt) {  // I know this is redundant...just put it here to double check
+    if (clockInterrupt) {  // I know this is redundant...just put it here to make sure the RTC alarm is off
       clearClockTrigger(); 
       digitalWrite(INTERRUPT_PIN, HIGH);//set weak internal pull up the interrupt pin
     }
@@ -605,7 +607,7 @@ void loop ()
 
     //Vcc = readExternalVcc();  // now I am only reading this now before SD write operations - as there is a power wasting 3ms delay in this code
     //Vcc2 = readInternalVcc();  // 5ms delay -field runs only reading VCC2 after new file creation event
-    digitalWrite(READSENSOR_PIN, LOW);  // end of heartbeat pip assuming 10k ohm limiter!
+    digitalWrite(READSENSOR_PIN, LOW);  // end of heartbeat pip - might need to leave it on longer...
     
     if (Vcc2 < 3350){  // this check catches if the chip is seeing a voltage too low for the SD car writing
       #ifdef ECHO_TO_SERIAL
@@ -614,6 +616,8 @@ void loop ()
       error();
     }
 
+// Now we read the sensors that are attached:
+//--------------------------------------------------------------------------------------------------
     //Read the accelerometer:
 #ifdef BMA180_ADDRESS
     readBMA180();
@@ -650,9 +654,10 @@ void loop ()
 #endif
 
     wholeTemp = (int)TEMP_degC; 
-    fracTemp= (TEMP_degC - wholeTemp) * 100; // Float split into 2 intergers
+    fracTemp= (TEMP_degC - wholeTemp) * 100; // Float split into 2 intergers so print funtions dont eat memory
 
-    //serial output for debugging - comment out ECHO_TO_SERIAL to eliminate
+// This first section is serial output for debugging only  - comment out ECHO_TO_SERIAL to eliminate
+//--------------------------------------------------------------------------------------------------
 #ifdef ECHO_TO_SERIAL
     Serial.print(CycleTimeStamp); 
     Serial.print(F(" Cycle: ")); 
@@ -716,8 +721,9 @@ void loop ()
     //delay(100); //short delay to clear serial com lines
 #endif
 
-    //Construct first char string of 28 bytes - end of buffer is filled with blank spaces flexibly with pstring
-    //but could contruct the buffer with sprintf if I wasn't changing my sensors so often!
+//Construct first char string of 28 bytes - end of buffer is filled with blank spaces flexibly with pstring
+//but could contruct the buffer with sprintf if I wasn't changing my sensors so often!
+//--------------------------------------------------------------------------------------------------
 
     PString str(EEPROMBuffer, sizeof(EEPROMBuffer)); 
     str = CycleTimeStamp;           //17 / 16 characters without seconds plus comma
@@ -736,7 +742,8 @@ void loop ()
     CurrentPageStartAddress += EEPromPageSize;
     digitalWrite(BLUE_PIN, LOW);
 
-    //Construct second char string of 28 bytes to complete the record
+//Construct second char string of 28 bytes to complete the record
+//--------------------------------------------------------------------------------------------------
     str = ","; 
 
 #ifdef accelIsAttached  // 20 characters of data incl signs commas for bma180, less for bma250
@@ -772,8 +779,10 @@ void loop ()
     CurrentPageStartAddress += EEPromPageSize;
     digitalWrite(BLUE_PIN, LOW);
 
+//Construct third char string of 28 bytes IF you need to
+//--------------------------------------------------------------------------------------------------
+
 #if defined(firstOrderCalculation) || defined(HMC5883_ADDRESS)  // 1st order calcs on pressure or compass data means we need to construct a third string
-    //Construct third char string of 28 bytes to complete the record
     str = ",";
 
 #if defined(HMC5883_ADDRESS)
@@ -804,8 +813,10 @@ void loop ()
     digitalWrite(BLUE_PIN, LOW);
 #endif
 
-    // IF full set of sample cycles is complete, run a loop to dump data to the sd card
-    // BUT only if Vcc is above CutoffVoltage so we dont hurt the card
+// Check if full set of sample cycles is complete (so eeprom is full), run a loop to dump data to the sd card
+// BUT only if Vcc is above CutoffVoltage so we dont hurt the card
+//--------------------------------------------------------------------------------------------------
+
     if (Cycle==(SamplesPerCycle-1) && Vcc >= CutoffVoltage){ 
       
       Vcc = readExternalVcc();  // Check psupply to make sure its ok to write to sd card
@@ -866,21 +877,24 @@ void loop ()
         countLogs++;
         // An application which writes to a file using print(), println() or write() must call sync()
         // at the appropriate time to force data and directory information to be written to the SD Card. approximately 512 bytes
-        if(BytesWrittentoSD > 440) {
+        if(BytesWrittentoSD > 440) { 
           syncTheFile; 
           BytesWrittentoSD=0;
-        } //might need to lower this
+        } //I am probably doing this too often  (512-64=448)
       }
 
-      //I used to check Vcc2 here, but thats been moved to New file creation event
+      //I used to check Vcc2 here, but thats been moved to New file creation event, so it does not give you any usefull data until the second sd card file
       
       file.close(); 
       //Run the SdFat bench example.  it will print the max latency.  http://forum.arduino.cc/index.php/topic,109862.0.html
       //A latency of over 300 ms is unusually long.  150-200 ms is more common. 
-      CurrentPageStartAddress=0;
+      CurrentPageStartAddress=0; //now that we have dumped the eeprom to the sd, we can start filling it from the beginning again
       //delay(10);  not sure if I need this delay or not to let the sd card close operation finish?
  
     }  //cycles per sample loop terminator for if (Cycle==(SamplesPerCycle-1))
+
+// Now we need to set the next RTC alarm and go back to sleep
+//------------------------------------------------------------------------
 
     // setNextAlarmTime();
     Alarmhour = now.hour(); 
@@ -992,8 +1006,10 @@ void loop ()
     //delay(50); //a delay long enought to boot out the serial coms 
 #endif
 
-//the following loop continues updating the drip counter ("tapcount" in the sleepNwait4AccInterrupt() routine) 
+//the following DRIP SENSOR ONLY loop continues updating the drip counter ("tapcount" in the sleepNwait4AccInterrupt() routine) 
 //until a RTC interrupt occurs, which breaks out because clockInterrupt = true;
+//none of the other datalogger configurations use this ADXL345 little loop!
+//------------------------------------------------------------------------
 
 #ifdef ADXL345_ISON  
 
@@ -1020,15 +1036,15 @@ void loop ()
       // LENGTHEN this delay if you start getting "double" hits from single drips
 
       digitalWrite(READSENSOR_PIN, HIGH);  // WITH a 10K LIMIT RESISTOR, YOU CAN LEAVE THE TAP INDICATOR led ON DURING this short SLEEP
-      
+      //OR    
       //setWTD_16ms();  //limits to 1000/16 = 62 cycles per second: "ACTUAL" tested output goes down to 37.5 counts per sec with this delay
       //setWTD_32ms();  //limits to 1000/32 = 30 cycles per second: "ACTUAL" tested output goes down to 22.5 counts per sec with this delay
       //sleepNwait4WDT();
       
       //OR
+      //LowPower.powerDown(SLEEP_15Ms, ADC_OFF, BOD_OFF);
       
-      //LowPower.powerDown(SLEEP_30MS, ADC_OFF, BOD_OFF);
-      LowPower.powerDown(SLEEP_15Ms, ADC_OFF, BOD_OFF);
+      LowPower.powerDown(SLEEP_30MS, ADC_OFF, BOD_OFF);
       digitalWrite(READSENSOR_PIN, LOW); //pip to show that a tap occured
       
       intSource = 0;      
@@ -1059,8 +1075,8 @@ void loop ()
 }   //the MAIN void LOOP TERMINATOR 
 
 
-/* To set Duration of low power sleep mode. Use SLEEP_FOREVER to use other wake up resource:
-* (a) SLEEP_15MS - 15 ms sleep  (THERE IS A TYPO IN THE LIBRARY - SLEEP_MS defined as SLEEP_Ms (lower s)
+/* To set Duration of Rocket Screams low power sleep mode. Use SLEEP_FOREVER to use other wake up resource:
+* (a) SLEEP_15Ms - 15 ms sleep  (THERE IS A TYPO IN THE LIBRARY - SLEEP_MS defined as SLEEP_Ms (lower case s)
 * (b) SLEEP_30MS - 30 ms sleep
 * c) SLEEP_60MS - 60 ms sleep
 * d) SLEEP_120MS - 120 ms sleep
@@ -1069,7 +1085,7 @@ void loop ()
 * (g) SLEEP_1S - 1 s sleep
 * (h) SLEEP_2S - 2 s sleep
 * (i) SLEEP_4S - 4 s sleep
-* (j) SLEEP_8S - 8 s sleep
+* (j) SLEEP_8S - 8 s sleep  //did not work for me?  perhaps another typo?
 * (k) SLEEP_FOREVER - Sleep without waking up through WDT
 
 * example: LowPower.powerDown(SLEEP_15Ms, ADC_OFF, BOD_OFF); */
@@ -1081,6 +1097,7 @@ void loop ()
  ***********************************************/
 // I might prefer to use an edge-triggered interrupt in this case, as the low-level interrupt triggers continuously?
 
+#ifdef ADXL345_ISON
 //this is the NON rocket scream library version:
 /* void sleepNwait4AccInterrupt() 
 {
@@ -1102,10 +1119,8 @@ void loop ()
     accInterrupt=false;
   } // tapcount is now an unsigned long to accomodate really long intervals
 }
-
 */
 
-#ifdef ADXL345_ISON
 void sleepNwait4AccInterrupt()   //this version uses the rocket scream libraries - which lets me shut off the BOD fuse
 {
   noInterrupts ();          // make sure we don't get interrupted before we sleep
@@ -1285,13 +1300,13 @@ file.println(F(" "));
   file.println(F(" "));
 
 #ifdef accelIsAttached
-  file.println(F("YYYY/MM/DD HH:MM, Temp(C), Vcc(mV)/10, AccX = , AccY = , AccZ = , Vcc2 , Compass X, Compass Y, Compass Z,"));
+  file.println(F("YYYY/MM/DD HH:MM, Temp(C), Vcc(mV), AccX = , AccY = , AccZ = , Vcc2 , Compass X, Compass Y, Compass Z,"));
 #endif
 #ifdef MS580X_I2C_ADDRESS  //if we are pressure sensing, the unit is stationary, and we dont have the acc or comass running
-  file.println(F("YYYY/MM/DD HH:MM, Temp(C), Vcc(mV)/10, D1(Raw MS580x Press), D2(Raw MS580x Temp), Vcc2 , 1st order Pres (mbar), 1st ord. Temp(C)"));
+  file.println(F("YYYY/MM/DD HH:MM, Temp(C), Vcc(mV), D1(Raw MS580x Press), D2(Raw MS580x Temp), Vcc2 , 1st order Pres (mbar), 1st ord. Temp(C)"));
 #endif
 #ifdef ADXL345_ISON
-  file.println(F("YYYY/MM/DD HH:MM, RTC Temp(C), Vcc(mV)/10, Drip Count ,Vcc after Newfile Created"));
+  file.println(F("YYYY/MM/DD HH:MM, RTC Temp(C), Vcc(mV), Drip Count ,Vcc after Newfile Created"));
 #endif
 
 
