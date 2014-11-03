@@ -80,7 +80,7 @@ byte Cycle=0;
 //#define firstOrderCalculation   // it adds 3k! -only define this if you have enough memory! otherwise just save raw D1 and D2 from the pressure sensors
 
 #define ADXL345_ISON 0x53    //drip sensor is a special case without other sensors attached!
-#define tapSensitivity 2
+#define tapSensitivity 2  //might have to reduce this - some adxl's are twitchier than others
 
 //#define unregulatedMCU 1  //Tinyduino can read vcc directly
 #define vRegulatedMCU 1  //Pro Mini needs to use a voltage divider on analog pin 0
@@ -131,7 +131,19 @@ uint8_t BytesWrittentoSD = 0;
 
 //DS3231 RTC
 //**********
-#define DS3231_ADDRESS 104
+#define DS3231_ADDRESS 0x68                 //=104 dec
+#define DS3231_STATUS_REG 0x0f
+#define DS3231_CTRL_REG 0x0e
+#define Bit0_MASK         B00000001        //Bit 0=Alarm 1 Flag (A1F)
+#define Bit1_MASK         B00000010        //Bit 1 = Alarm 2 Flag (A2F)
+#define Bit2_MASK         B00000100
+#define Bit3_MASK         B00001000        //Bit 3: Enable/disable 32kHz Output (EN32kHz) - has no effect on sleep current
+#define Bit4_MASK         B00010000        //Bit 4: Bits 4&5 of status reg adjust Time Between Temperature Updates  see http://www.maximintegrated.com/en/app-notes/index.mvp/id/3644
+#define Bit5_MASK         B00100000        //Bit 5:
+#define Bit6_MASK         B01000000
+#define Bit7_MASK         B10000000
+#define RTCPOWER_PIN 7                      //When the arduino is awake, power the rtc from this pin (draws ~70uA), when arduino sleeps pin set low & rtc runs on battery at <3uA
+                                            // SEE http://www.gammon.com.au/forum/?id=11497 for an example powering ds1307 from pin, alarms still work!
 RTC_DS3231 RTC;                            //DS3231 will function with a VCC ranging from 2.3V to 5.5V
 byte Alarmhour = 1;
 byte Alarmminute = 1;
@@ -283,6 +295,8 @@ int64_t	Sens2 = 0;
 void setup () {
   pinMode(POWERDOWN_PIN, OUTPUT);
   digitalWrite(POWERDOWN_PIN, LOW);// driving this pin high shuts down the system
+  pinMode(RTCPOWER_PIN, HIGH);
+  digitalWrite(RTCPOWER_PIN, OUTPUT);// driving this high supplies power to the RTC Vcc pin while arduino is awake
   pinMode(INTERRUPT_PIN, INPUT);
   digitalWrite(INTERRUPT_PIN, HIGH);//RTC is on pin (2) pull up the interrupt pin
 #ifdef ADXL345_ISON  
@@ -304,6 +318,9 @@ void setup () {
   //**********
   clearClockTrigger(); //stops RTC from holding the interrupt low if system reset just occured
   RTC.turnOffAlarm(1);
+  i2c_writeRegBits(DS3231_ADDRESS,DS3231_STATUS_REG,0,Bit3_MASK); // disable the 32khz output  pg14-17 of datasheet  //This does not reduce the sleep current
+  i2c_writeRegBits(DS3231_ADDRESS,DS3231_STATUS_REG,1,Bit4_MASK); // see APPLICATION NOTE 3644 - this might only work on the DS3234?
+  i2c_writeRegBits(DS3231_ADDRESS,DS3231_STATUS_REG,1,Bit5_MASK); // setting bits 4&5 to 1, extends the time between RTC temp updates to 512seconds (from default of 64s)
   DateTime now = RTC.now();
   Startday = now.day();
   DateTime compiled = DateTime(__DATE__, __TIME__);  
@@ -987,6 +1004,9 @@ void loop ()
       //setA1Time(byte A1Day, byte A1Hour, byte A1Minute, byte A1Second, byte AlarmBits, bool A1Dy, bool A1h12, bool A1PM)
     }
     RTC.turnOnAlarm(1);
+    delay(5);  //give the RTC a few ms to finish operations
+    pinMode (RTCPOWER_PIN, INPUT);
+    digitalWrite(RTCPOWER_PIN, LOW); // RTC vcc connected to this pin - driving this LOW FORCES to the RTC to draw power from the coin cell during sleep
 
 #ifdef ECHO_TO_SERIAL
     Serial.println(F(" "));
@@ -1052,7 +1072,13 @@ void loop ()
       bytebuffer1=i2c_readRegByte(ADXL345_ADDRESS,0x2b); //read the ADXL345_ACT_TAP_STAT register to clear it
       digitalWrite(adxl345intPin, HIGH);//now that the acc interupt is gone, set internal pull up back the ADXL interrupt pin
 
+      pinMode (RTCPOWER_PIN, INPUT);
+      digitalWrite(RTCPOWER_PIN, LOW); // RTC vcc connected to this pin - driving this LOW FORCES to the RTC to draw power from the coin cell during sleep
+      
       sleepNwait4AccInterrupt();
+      
+      digitalWrite(RTCPOWER_PIN, HIGH); // about to generate I2C traffic, so power the rtc from the pin
+      pinMode (RTCPOWER_PIN, OUTPUT);
 
     }  //WHILE LOOP TERMINATOR for drip counter! 
 
@@ -1060,6 +1086,9 @@ void loop ()
     // see one solution at http://heliosoph.mit-links.info/atmega328p-wakeup-sleep-via-interrupt/
 
     if (clockInterrupt) {      //if you broke out of the while loop, then your RTC interrupt fired.
+      digitalWrite(RTCPOWER_PIN, HIGH); // about to generate I2C traffic, so power the rtc from the pin
+      pinMode (RTCPOWER_PIN, OUTPUT);
+      LowPower.powerDown(SLEEP_15Ms, ADC_OFF, BOD_OFF); //give the RTC a few moments to adjust to power on vcc
       clearClockTrigger(); 
       digitalWrite(INTERRUPT_PIN, HIGH);//set weak internal pull up the interrupt pin
     }
@@ -1070,7 +1099,15 @@ void loop ()
 
 #endif
 
+    digitalWrite(RTCPOWER_PIN, HIGH); // driving this HIGH powers the rtc from the pin
+    pinMode (RTCPOWER_PIN, OUTPUT);
+    LowPower.powerDown(SLEEP_15Ms, ADC_OFF, BOD_OFF); //give the RTC a few moments to adjust to power on vcc
+    
   }   //samples per CYCLE LOOP TERMINATOR (# of sample cycles buffered in eeprom before sd card write happens)
+  
+    digitalWrite(RTCPOWER_PIN, HIGH); // driving this HIGH powers the rtc from the pin
+    pinMode (RTCPOWER_PIN, OUTPUT);
+    LowPower.powerDown(SLEEP_15Ms, ADC_OFF, BOD_OFF); //give the RTC a few moments to adjust to power on vcc
 
 }   //the MAIN void LOOP TERMINATOR 
 
@@ -1474,11 +1511,11 @@ void clearClockTrigger()
   Wire.beginTransmission(0x68);   //Tell devices on the bus we are talking to the DS3231
   Wire.write(0x0F);               //Tell the device which address we want to read or write
   Wire.endTransmission();         //Before you can write to and clear the alarm flag you have to read the flag first!
-  Wire.requestFrom(0x68,1);       // Read one byte
-  bytebuffer1=Wire.read();      // In this example we are not interest in actually using the bye
+  Wire.requestFrom(0x68,1);       //Read one byte
+  bytebuffer1=Wire.read();        //In this example we are not interest in actually using the bye
   Wire.beginTransmission(0x68);   //Tell devices on the bus we are talking to the DS3231 
-  Wire.write(0x0F);               //Tell the device which address we want to read or write
-  Wire.write(0b00000000);         //Write the byte.  The last 0 bit resets Alarm 1
+  Wire.write(0x0F);               //status register
+  Wire.write(0b00000000);         //Write the byte.  The last 0 bit resets Alarm 1 //is it ok to just set these all to zeros?
   Wire.endTransmission();
   clockInterrupt=false;           //Finally clear the flag we use to indicate the trigger occurred
 }
@@ -1767,7 +1804,7 @@ int freeRam ()
 
 
 /**********************************************
- * ERROR HANDLER
+ * ERROR HANDLER "Houston we have a problem..."
  ***********************************************/
 // more advanced debugging: http://forum.arduino.cc/index.php?topic=203282.0
 void error() 
@@ -1784,6 +1821,10 @@ void error()
     }
   
   //}
+  
+  pinMode(RTCPOWER_PIN, INPUT);    //stop sourcing or sinking current
+  digitalWrite(RTCPOWER_PIN, LOW); // driving this LOW FORCES to the RTC to draw power from the coin cell
+  
   #if defined POWERDOWN_PIN
   digitalWrite(POWERDOWN_PIN, HIGH);// driving this pin high shuts down the system if pololu power switch attached
   delay(10);// just in case it takes time to power down...
@@ -3012,29 +3053,24 @@ void resetSensor() {
 float getRTCTemp()
 {
   float temp3231;
-  //temp registers (11h-12h) get updated automatically every 64s
-  Wire.beginTransmission(DS3231_ADDRESS);
-  Wire.write(0x11);
-  Wire.endTransmission();
-  Wire.requestFrom(DS3231_ADDRESS, 2);
+        //temp registers (11h-12h) get updated automatically every 64s
+        Wire.beginTransmission(DS3231_ADDRESS);
+	Wire.write(0x11);
+	Wire.endTransmission();
+	Wire.requestFrom(DS3231_ADDRESS, 2);
 
-  if(Wire.available()) {
-    bytebuffer1 = Wire.read(); //msb portion
-    bytebuffer2 = Wire.read(); //lsb portion
-
-    temp3231 = ((((short)bytebuffer1 << 8 | (short)bytebuffer1) >> 6) / 4.0); 
-    // Allows for readings below freezing - Thanks to Coding Badly
-    //temp3231 = (temp3231 * 1.8 + 32.0); // Convert Celcius to Fahrenheit
+if(Wire.available()) {
+	bytebuffer1 = Wire.read();	// Here's the MSB
+	temp3231 = float(bytebuffer1) + 0.25*(Wire.read()>>6);
+        // OR temp3231 = ((((short)bytebuffer1 << 8 | (short)bytebuffer1) >> 6) / 4.0);  //by coding badly
     return temp3231;
 
   }
   else {
     temp3231 = 255.0;  //Use a value of 255 as error flag
   }
-
   return temp3231;
 }
-
 #endif
 
 
