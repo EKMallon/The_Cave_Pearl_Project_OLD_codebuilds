@@ -3062,7 +3062,10 @@ float getRTCTemp()
 if(Wire.available()) {
 	bytebuffer1 = Wire.read();	// Here's the MSB
 	temp3231 = float(bytebuffer1) + 0.25*(Wire.read()>>6);
-        // OR temp3231 = ((((short)bytebuffer1 << 8 | (short)bytebuffer1) >> 6) / 4.0);  //by coding badly
+        // OR
+        //    bytebuffer1 = Wire.read(); //msb portion
+        //    bytebuffer2 = Wire.read(); //lsb portion 
+        //temp3231 = ((((short)bytebuffer1 << 8 | (short)bytebuffer2) >> 6) / 4.0);  //by coding badly
     return temp3231;
 
   }
