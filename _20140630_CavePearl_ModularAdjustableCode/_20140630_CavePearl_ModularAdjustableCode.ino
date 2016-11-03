@@ -18,9 +18,16 @@
 *
 *       Sensors supported included in this build:
 *       HMC5883 Compass, DS18B20 Temp, TMP102 Temp, BMA180 Acc, BMA250 Acc, Ms5803-02 & 05 Pressure sensors
-*       *uncomment defines at the beginning of the script for each sensor you have connected - the rest of the code should
-*       adjust automatically...more or less...you might want to adjust the pstring statements where the readings are concatenated
-*       or you will have alot of zeros in your data files where there is a print statement, but no sensor reads to go with it.
+*       *uncomment defines at the beginning of the script for each sensor you have connected 
+*
+ *       HOWEVER: THIS SCRIPT IS NOT PLUG-&-PLAY.  
+ *       YOU will have to edit some of the str.printstatements that load our sensor data into the eeprom buffer, 
+ *       and change the number of eeprom pages being used to store that data 
+ *       THEN change then number of eeprom pages written to the SD card in the data writing function to match the # of pages you loaded with sensor data
+ *       And the header information that gets printed by that routine at the top of the data file:  "YYYY/MM/DD HH:MM,Batt(mV),Sensor1, Sensor 2, ETC..."
+ *       In that routine you also have to change the limit set for:  if(BytesWrittentoSD > NUMBER) so you don't exceed the 512 byte SD card writing buffer
+ *       Each cycle writes (32bytes * number of pages) + 2bytes for CR & termination character
+ *       so you have to sync BEFORE your next cycle IF that next cycle would put you over the 512 byte limit
 */
  
 
